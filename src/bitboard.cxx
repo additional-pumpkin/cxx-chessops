@@ -394,7 +394,7 @@ namespace chessops
     }
     bool Board::parse_fen(std::string fen, UniquePosition &position)
     {
-        int curr_char = 0;
+        uint curr_char = 0;
         // Field 1: parse piece positions
         for (Square square = A8; fen[curr_char] != ' '; )
         {
