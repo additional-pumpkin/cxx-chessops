@@ -62,7 +62,89 @@ namespace chessops
         return s;
 
     }
+
+    std::string get_castling_rights(int castling_rights)
+    {
+        if (castling_rights & CASTLING_NONE)
+            return "None";
+        std::string s;
+        s += "White: ";
+        if (castling_rights & WHITE_CASTLING_OO)
+            s += " OO";
+        if (castling_rights & WHITE_CASTLING_OOO)
+            s+= " OOO";
+        s += "   Black: ";
+        if (castling_rights & BLACK_CASTLING_OO)
+            s += " OO";
+        if (castling_rights & BLACK_CASTLING_OOO)
+            s+= " OOO";
+
+        return s;
+            
+    }
+    std::string Board::print(const Position &position)
+    {
+        std::string s;
+        s += "by_piece:\n\n";
+        for (PieceType p = PAWN; p <= KING; ++p)
+        {
+            s += piece_type_str.at(p) + "\n";
+            s += print_bitboard(position.by_type[p]);
+        }
+        s += "\n\n\nby_color:\n\n";
+        s += "WHITE\n";
+        s += print_bitboard(position.by_color[WHITE]);
+        s += "BLACK\n";
+        s += print_bitboard(position.by_color[BLACK]);
+        s += print_board_symbols(position);
+        return s;
+    }
+    std::string Board::print(const ExactPosition &position)
+    {
+        std::string s;
+        s += "by_piece:\n\n";
+        for (PieceType p = PAWN; p <= KING; ++p)
+        {
+            s += piece_type_str.at(p) + "\n";
+            s += print_bitboard(position.by_type[p]);
+        }
+        s += "\n\n\nby_color:\n\n";
+        s += "WHITE\n";
+        s += print_bitboard(position.by_color[WHITE]);
+        s += "BLACK\n";
+        s += print_bitboard(position.by_color[BLACK]);
+        s += print_board_symbols(position);
+        s += "Side to move: " + color_str.at(position.stm) + "\n";
+        s += "En passant square: " + square_str.at(position.ep) + "\n";
+        s += "Castling rights: " + get_castling_rights(position.castling_rights);
+        return s;
+    }
+
+    std::string Board::print(const UniquePosition &position)
+    {
+        std::string s;
+        s += "by_piece:\n\n";
+        for (PieceType p = PAWN; p <= KING; ++p)
+        {
+            s += piece_type_str.at(p) + "\n";
+            s += print_bitboard(position.by_type[p]);
+        }
+        s += "\n\n\nby_color:\n\n";
+        s += "WHITE\n";
+        s += print_bitboard(position.by_color[WHITE]);
+        s += "BLACK\n";
+        s += print_bitboard(position.by_color[BLACK]);
+        s += print_board_symbols(position);
+        s += "Side to move: " + color_str.at(position.stm) + "\n";
+        s += "En passant square: " + square_str.at(position.ep) + "\n";
+        s += "Castling rights: " + get_castling_rights(position.castling_rights) + "\n";
+        s += "Half move clock: " + std::to_string(position.half_move_clock) + "\n";
+        s += "Ply number: " + std::to_string(position.ply_number) + "\n";
+
+        return s;
+    }
     
+
     std::string Board::print_board_symbols()
     {
         std::string s = "   +---+---+---+---+---+---+---+---+\n";
@@ -84,7 +166,27 @@ namespace chessops
         return s;
         
     }
-    
+    std::string Board::print_board_symbols(const Position &position)
+    {
+        std::string s = "   +---+---+---+---+---+---+---+---+\n";
+        std::string symbol;
+        for(Rank rank = RANK_8; rank >= RANK_1; --rank)
+        {
+            s += std::to_string(rank + 1) + "  ";
+            for(File file = FILE_A; file <= FILE_H; ++file)
+            {
+                Square square = make_square(file, rank);
+                if ((symbol = get_piece_symbol(get_piece_at(square, position))) != "x")
+                  s += "| " + symbol + " ";
+                else
+                    s += "|   ";
+            }
+            s += "|\n   +---+---+---+---+---+---+---+---+\n";
+        }
+        s += "     A   B   C   D   E   F   G   H\n";
+        return s;
+        
+    }
     void Board::clear_square(Square square)
     {
         if (square == SQUARE_NONE)
@@ -103,10 +205,23 @@ namespace chessops
         m_unique_position.by_color[color_of(piece)] |= square_bitboard(square);
         m_unique_position.board[square] = piece;
     }
+    void Board::set_piece_at(Piece piece, Square square, Position &position)
+    {
+        clear_square(square);
+        if (piece == PIECE_NONE || square == SQUARE_NONE)
+            return;
+        position.by_type[type_of(piece)] |= square_bitboard(square);
+        position.by_color[color_of(piece)] |= square_bitboard(square);
+        position.board[square] = piece;
+    }
     
     Piece Board::get_piece_at(Square square)
     {
         return m_unique_position.board[square];
+    }
+    Piece Board::get_piece_at(Square square, const Position &position)
+    {
+        return position.board[square];
     }
     
     void Board::set_ep_square(Square square)
@@ -118,7 +233,7 @@ namespace chessops
     {
         return m_unique_position.ep;
     }
-    
+
     bool Board::parse_fen(std::string fen, Position &position)
     {
         int curr_char = 0;
@@ -127,7 +242,7 @@ namespace chessops
         {
             char fen_char = fen[curr_char];
             // match ascii pieces within FEN string
-            int id;
+            size_t id;
             // match empty square numbers within FEN string
             if (isdigit(fen_char))
             {
@@ -150,7 +265,53 @@ namespace chessops
             {
                 // init piece type            
                 // set piece on corresponding bitboard
-                set_piece_at(Piece(id), square);
+                set_piece_at(Piece(id), square, position);
+                
+                // increment square and pointer to FEN string
+                ++square;
+                ++curr_char;
+            }
+            
+            else
+            {
+                CHESSOPS_CORE_ERROR("Field 1: Malformed fen positions\n"); // error
+                return false;
+            }
+        }
+        return true;
+    }
+    bool Board::parse_fen(std::string fen, ExactPosition &position)
+    {
+        int curr_char = 0;
+        // Field 1: parse piece positions
+        for (Square square = A8; fen[curr_char] != ' '; )
+        {
+            char fen_char = fen[curr_char];
+            // match ascii pieces within FEN string
+            size_t id;
+            // match empty square numbers within FEN string
+            if (isdigit(fen_char))
+            {
+                // init offset (convert char 0 to int 0)
+                int offset = fen_char - '0';
+                
+                // increment square and pointer to FEN string
+                square = Square(square + offset);
+                ++curr_char;
+            }
+            
+            // match rank separator
+            else if (fen_char == '/')
+            {
+                // increment pointer to FEN string
+                ++curr_char;
+                square = Square(square - 16);
+            }
+            else if ((id = fen_char_pieces.find(fen_char)) != std::string::npos)
+            {
+                // init piece type            
+                // set piece on corresponding bitboard
+                set_piece_at(Piece(id), square, position);
                 
                 // increment square and pointer to FEN string
                 ++square;
@@ -227,9 +388,159 @@ namespace chessops
             ++curr_char;
         }
 
+        
+
         return true;
     }
-    
+    bool Board::parse_fen(std::string fen, UniquePosition &position)
+    {
+        int curr_char = 0;
+        // Field 1: parse piece positions
+        for (Square square = A8; fen[curr_char] != ' '; )
+        {
+            char fen_char = fen[curr_char];
+            // match ascii pieces within FEN string
+            size_t id;
+            // match empty square numbers within FEN string
+            if (isdigit(fen_char))
+            {
+                // init offset (convert char 0 to int 0)
+                int offset = fen_char - '0';
+                
+                // increment square and pointer to FEN string
+                square = Square(square + offset);
+                ++curr_char;
+            }
+            
+            // match rank separator
+            else if (fen_char == '/')
+            {
+                // increment pointer to FEN string
+                ++curr_char;
+                square = Square(square - 16);
+            }
+            else if ((id = fen_char_pieces.find(fen_char)) != std::string::npos)
+            {
+                // init piece type            
+                // set piece on corresponding bitboard
+                set_piece_at(Piece(id), square, position);
+                
+                // increment square and pointer to FEN string
+                ++square;
+                ++curr_char;
+            }
+            
+            else
+            {
+                CHESSOPS_CORE_ERROR("Field 1: Malformed fen positions\n"); // error
+                return false;
+            }
+
+        }
+        ++curr_char;
+
+        // Field 2: parse side to move
+        if(fen[curr_char] == 'w' || fen[curr_char] == 'b')
+        {
+
+            position.stm = fen[curr_char] == 'w' ? WHITE : BLACK; 
+            ++curr_char;
+        }
+        else
+        {
+            CHESSOPS_CORE_ERROR("Field 2: Invalid side to move\n"); // error
+            return false;
+        }
+
+        if (fen[curr_char] != ' ')
+        {
+            CHESSOPS_CORE_ERROR("Field 2: There should be a space at the end of field 2\n"); // error
+            return false;
+        }
+
+        ++curr_char;
+
+        // Field 3: parse castling rights
+
+        while (fen[curr_char] != ' ')
+        {
+            switch (fen[curr_char])
+            {
+            case '-': position.castling_rights =  CASTLING_NONE;      break;
+            case 'K': position.castling_rights |= WHITE_CASTLING_OO;  break;
+            case 'Q': position.castling_rights |= WHITE_CASTLING_OOO; break;
+            case 'k': position.castling_rights |= BLACK_CASTLING_OO;  break;
+            case 'q': position.castling_rights |= BLACK_CASTLING_OOO; break;
+
+            default: CHESSOPS_CORE_ERROR("Field 3: Invalid character: {0}", fen[curr_char]); break;
+            }
+            ++curr_char;
+
+        }
+        ++curr_char;
+        // Field 4: parse enpassant square
+        if (fen[curr_char] != '-')
+        {
+            if(fen[curr_char] >= 'a' && fen[curr_char] <= 'h' && fen[curr_char +1] >= '1' && fen[curr_char + 1] <= '8')
+            {
+                File f = File(fen[curr_char] - 'a');
+                Rank r = Rank(fen[curr_char + 1] - '1');
+                position.ep = make_square(f, r); 
+                curr_char += 2;
+            }
+            else
+            {
+                CHESSOPS_CORE_ERROR("Field 4: Invalid en passant square\n"); // error
+                return false;
+            }
+        }
+        else
+        {
+            position.ep = SQUARE_NONE;
+            ++curr_char;
+        }
+        ++curr_char;
+        CHESSOPS_CORE_INFO("Field 5 has: \"{0}\"", fen.substr(curr_char));
+        // field 5 half move number
+        if (!isdigit(fen.at(curr_char)))
+        {
+            CHESSOPS_CORE_ERROR("Field 5: Not a number\n"); // error
+
+        }
+        std::string s;
+        do 
+        {
+            s +=  fen.at(curr_char);
+            ++curr_char;
+        } while ((isdigit(fen.at(curr_char))));
+        
+        position.half_move_clock =  stoi(s);
+        ++curr_char;
+
+        CHESSOPS_CORE_INFO("Field 6 has: \"{0}\"", fen.substr(curr_char));
+        // field 6 full move number
+        if (!isdigit(fen.at(curr_char)))
+        {
+            CHESSOPS_CORE_ERROR("Field 6: Not a number\n"); // error
+
+        }
+        s = "";
+        do 
+        {
+            s +=  fen.at(curr_char);
+            ++curr_char;
+
+        }
+        while ((fen.length() != curr_char && isdigit(fen.at(curr_char))));
+        int move_number = stoi(s) - 1;
+        position.ply_number = position.stm == WHITE ? move_number * 2 : move_number * 2 + 1;
+        ++curr_char;
+
+
+        return true;
+    }
+
+
     Piece Board::get_piece_at_from_bb(Square s)
     {
         bool is_white = false;
@@ -289,25 +600,16 @@ namespace chessops
     void Board::init()
     {
         init_leaper_attacks();
-        for (Square sq = A1; sq <= H8; ++sq)
-        {
-            m_unique_position.board[sq] = PIECE_NONE;
-            // std::cout << print_bitboard();
-            
-
-        }
+        // for (Square sq = A1; sq <= H8; ++sq)
+        // {
+        //     m_unique_position.board[sq] = PIECE_NONE;
+        // }
         m_unique_position.castling_rights = CASTLING_ALL;
         set_ep_square(SQUARE_NONE);
         set_stm(COLOR_NONE);
         UniquePosition position;
-        parse_fen(start_position, position);
-        // CHESSOPS_CORE_TRACE(print());
-
-        CHESSOPS_CORE_CRITICAL("This is very bad");
-        CHESSOPS_CORE_ERROR("This is an error");
-        CHESSOPS_CORE_WARN("This is a warning");
-        CHESSOPS_CORE_INFO("This is an info");
-        CHESSOPS_CORE_TRACE("This is a trace");
+        parse_fen("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", position);
+        CHESSOPS_CORE_INFO(print(position));
 
     }
     
